@@ -1,6 +1,6 @@
 {
   "name": "xp-game-web",
-  "version": "0.0.1-SNAPSHOT",
+  "version": "0.0.1",
   "description": "XP Game Web Application",
   "main": "index.js",
   "scripts": {
