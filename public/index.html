@@ -244,6 +244,15 @@
             visibility: hidden; /* Hidden until game initializes */
         }
         
+        /* AI Bot Sprites (created dynamically) */
+        .ai-bot-sprite {
+            position: absolute;
+            z-index: 9;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        
     </style>
 </head>
 <body>
@@ -275,6 +284,7 @@
     <div id="game-screen">
         <div id="game-stars"></div>
         <img id="taxi-sprite" src="assets/taxi.png" alt="Taxi">
+        <!-- AI bots are created dynamically -->
     </div>
     
     <script src="js/start-screen.js"></script>

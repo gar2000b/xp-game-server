@@ -15,7 +15,8 @@ class GameEngine {
             thrusterForce: config.thrusterForce || 1500,  // Thruster force in pixels/s² (strong enough to overcome gravity)
             regularFlightThrust: config.regularFlightThrust || 500,  // Constant upward thrust in regular flight mode (slows fall, weaker than W thrust)
             hoverThrust: config.hoverThrust || null,     // Hover thrust in pixels/s² (null = auto-calculate to match gravity)
-            hoverDamping: config.hoverDamping || 800     // Hover damping force in pixels/s² (slows vertical velocity to zero)
+            hoverDamping: config.hoverDamping || 800,     // Hover damping force in pixels/s² (slows vertical velocity to zero)
+            aiBotCount: config.aiBotCount || 2            // Number of AI bots to spawn
         };
         
         // Timing
@@ -350,7 +351,8 @@ function initGame() {
         thrusterForce: 1500,      // Thruster force in pixels/s² (strong enough to overcome gravity)
         regularFlightThrust: 500,   // Constant upward thrust in regular flight mode (slows fall, weaker than W thrust)
         hoverThrust: null,        // Hover thrust in pixels/s² (null = auto-calculate to match gravity)
-        hoverDamping: 800         // Hover damping force in pixels/s² (slows vertical velocity to zero)
+        hoverDamping: 800,         // Hover damping force in pixels/s² (slows vertical velocity to zero)
+        aiBotCount: 2              // Number of AI bots to spawn
     });
     
     // Set up game callbacks
@@ -380,6 +382,69 @@ function initGame() {
             const taxiWidth = taxiSprite.offsetWidth || 0;
             taxiSprite.style.left = (taxi.x - taxiWidth / 2) + 'px';
             taxiSprite.style.top = taxi.y + 'px';
+        }
+        
+        // Create and position AI bots
+        const gameScreen = document.getElementById('game-screen');
+        if (gameScreen) {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const aiBotCount = gameEngine.config.aiBotCount;
+            
+            // Remove existing AI bot sprites
+            const existingBots = gameScreen.querySelectorAll('[id^="ai-bot-sprite-"]');
+            existingBots.forEach(bot => bot.remove());
+            
+            // Create AI bot sprites
+            for (let i = 0; i < aiBotCount; i++) {
+                const aiBotSprite = document.createElement('img');
+                aiBotSprite.id = `ai-bot-sprite-${i}`;
+                aiBotSprite.src = 'assets/ai.png';
+                aiBotSprite.alt = `AI Bot ${i + 1}`;
+                aiBotSprite.className = 'ai-bot-sprite';
+                aiBotSprite.style.position = 'absolute';
+                aiBotSprite.style.zIndex = '9';
+                aiBotSprite.style.imageRendering = 'pixelated';
+                aiBotSprite.style.imageRendering = '-moz-crisp-edges';
+                aiBotSprite.style.imageRendering = 'crisp-edges';
+                aiBotSprite.style.visibility = 'visible';
+                
+                // Position: first in center, subsequent ones to the right
+                const aiBotWidth = 32; // Approximate width, will be updated after image loads
+                const aiBotHeight = 32; // Approximate height
+                const centerX = screenWidth / 2;
+                const centerY = screenHeight / 2;
+                const spacing = 50; // Space between bots
+                
+                // First bot centered, second bot 100px to the right (50px + 50px more)
+                let botX;
+                if (i === 0) {
+                    botX = centerX - aiBotWidth / 2;
+                } else {
+                    // Second bot is 100px to the right (spacing * 2)
+                    botX = centerX + spacing * 2 - aiBotWidth / 2;
+                }
+                
+                aiBotSprite.style.left = botX + 'px';
+                aiBotSprite.style.top = (centerY - aiBotHeight / 2) + 'px';
+                
+                // Update position after image loads to get actual dimensions
+                aiBotSprite.onload = function() {
+                    const actualWidth = this.offsetWidth || 32;
+                    const actualHeight = this.offsetHeight || 32;
+                    let actualBotX;
+                    if (i === 0) {
+                        actualBotX = centerX - actualWidth / 2;
+                    } else {
+                        // Second bot is 100px to the right (spacing * 2)
+                        actualBotX = centerX + spacing * 2 - actualWidth / 2;
+                    }
+                    this.style.left = actualBotX + 'px';
+                    this.style.top = (centerY - actualHeight / 2) + 'px';
+                };
+                
+                gameScreen.appendChild(aiBotSprite);
+            }
         }
     };
     
@@ -421,6 +486,8 @@ function initGame() {
                         taxiSprite.style.top = taxiY + 'px';
                     }
                     
+                    // AI bots will be created in onInit, just ensure game screen is ready
+                    
                     // Start game when screen becomes active
                     if (!gameEngine.isRunning) {
                         // Pre-warm audio context before starting game to prevent delay on first pause
@@ -438,6 +505,11 @@ function initGame() {
                     if (taxiSprite) {
                         taxiSprite.style.visibility = 'hidden';
                     }
+                    // Hide AI bot sprites when leaving game screen
+                    const aiBotSprites = gameScreen.querySelectorAll('[id^="ai-bot-sprite-"]');
+                    aiBotSprites.forEach(bot => {
+                        bot.style.visibility = 'hidden';
+                    });
                 }
             }
         });
