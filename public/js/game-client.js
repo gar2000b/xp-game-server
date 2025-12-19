@@ -489,6 +489,9 @@ function initGame() {
                     
                     // AI bots will be created in onInit, just ensure game screen is ready
                     
+                    // Initialize WebSocket connection when game screen becomes active
+                    initWebSocket();
+                    
                     // Start game when screen becomes active
                     if (!gameEngine.isRunning) {
                         // Pre-warm audio context before starting game to prevent delay on first pause
@@ -501,6 +504,12 @@ function initGame() {
                     if (gameEngine && gameEngine.isRunning) {
                         gameEngine.stop();
                     }
+                // Send STOP_GAME message and close WebSocket connection when leaving game screen
+                sendStopGameMessage();
+                // Small delay to ensure message is sent before closing
+                setTimeout(() => {
+                    closeWebSocket();
+                }, 100);
                     // Hide taxi sprite when leaving game screen
                     const taxiSprite = document.getElementById('taxi-sprite');
                     if (taxiSprite) {
@@ -775,6 +784,173 @@ function renderGame(alpha) {
         } else {
             taxiSprite.style.transform = 'scaleX(1)';
         }
+    }
+}
+
+// WebSocket connection for game communication
+let gameWebSocket = null;
+let clientPingInterval = null;
+
+// GameEnvelope structure:
+// Header (4 bytes): message type (Uint16) + payload length (Uint16)
+// Payload: variable length data
+const MESSAGE_TYPE = {
+    PING: 1,
+    PONG: 2,
+    GAME_STATE: 3,
+    START_GAME: 4,
+    STOP_GAME: 5
+};
+
+// Initialize WebSocket connection
+function initWebSocket() {
+    // Close existing connection if any
+    closeWebSocket();
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    try {
+        gameWebSocket = new WebSocket(wsUrl);
+        
+        gameWebSocket.binaryType = 'arraybuffer'; // Receive binary messages as ArrayBuffer
+        
+        gameWebSocket.onopen = () => {
+            console.log('WebSocket connected to server');
+            
+            // Send START_GAME message to initialize game server
+            sendStartGameMessage();
+            
+            // Send ping every 1 second
+            clientPingInterval = setInterval(() => {
+                if (gameWebSocket && gameWebSocket.readyState === WebSocket.OPEN) {
+                    const messageType = MESSAGE_TYPE.PING;
+                    const payload = new Uint8Array(0); // Empty payload for ping
+                    const payloadLength = payload.length;
+                    
+                    // Create ArrayBuffer: 2 bytes (message type) + 2 bytes (payload length) + payload
+                    const buffer = new ArrayBuffer(4 + payloadLength);
+                    const view = new DataView(buffer);
+                    
+                    // Write header
+                    view.setUint16(0, messageType, true); // little-endian
+                    view.setUint16(2, payloadLength, true); // little-endian
+                    
+                    // Write payload (none for ping)
+                    const payloadView = new Uint8Array(buffer, 4);
+                    payloadView.set(payload);
+                    
+                    gameWebSocket.send(buffer);
+                    console.log('Client sent PING');
+                } else {
+                    clearInterval(clientPingInterval);
+                    clientPingInterval = null;
+                }
+            }, 1000);
+        };
+        
+        gameWebSocket.onmessage = (event) => {
+            // Handle binary message
+            if (event.data instanceof ArrayBuffer) {
+                const buffer = event.data;
+                const view = new DataView(buffer);
+                
+                // Read header
+                const messageType = view.getUint16(0, true); // little-endian
+                const payloadLength = view.getUint16(2, true); // little-endian
+                
+                if (messageType === MESSAGE_TYPE.PING) {
+                    console.log('Client received PING from server');
+                    
+                    // Send PONG response
+                    const pongType = MESSAGE_TYPE.PONG;
+                    const pongPayload = new Uint8Array(0);
+                    const pongBuffer = new ArrayBuffer(4 + pongPayload.length);
+                    const pongView = new DataView(pongBuffer);
+                    
+                    pongView.setUint16(0, pongType, true);
+                    pongView.setUint16(2, pongPayload.length, true);
+                    
+                    gameWebSocket.send(pongBuffer);
+                    console.log('Client sent PONG');
+                } else if (messageType === MESSAGE_TYPE.PONG) {
+                    console.log('Client received PONG from server');
+                }
+            }
+        };
+        
+        gameWebSocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+        
+        gameWebSocket.onclose = () => {
+            console.log('WebSocket disconnected from server');
+            if (clientPingInterval) {
+                clearInterval(clientPingInterval);
+                clientPingInterval = null;
+            }
+            // Attempt to reconnect after 3 seconds if still in game screen
+            setTimeout(() => {
+                if (document.getElementById('game-screen') && 
+                    document.getElementById('game-screen').classList.contains('active')) {
+                    initWebSocket();
+                }
+            }, 3000);
+        };
+    } catch (error) {
+        console.error('Failed to create WebSocket connection:', error);
+    }
+}
+
+// Send START_GAME message to server
+function sendStartGameMessage() {
+    if (gameWebSocket && gameWebSocket.readyState === WebSocket.OPEN) {
+        const messageType = MESSAGE_TYPE.START_GAME;
+        const payload = new Uint8Array(0); // Empty payload for START_GAME
+        const payloadLength = payload.length;
+        
+        // Create ArrayBuffer: 2 bytes (message type) + 2 bytes (payload length) + payload
+        const buffer = new ArrayBuffer(4 + payloadLength);
+        const view = new DataView(buffer);
+        
+        // Write header
+        view.setUint16(0, messageType, true); // little-endian
+        view.setUint16(2, payloadLength, true); // little-endian
+        
+        gameWebSocket.send(buffer);
+        console.log('Client sent START_GAME');
+    }
+}
+
+// Send STOP_GAME message to server
+function sendStopGameMessage() {
+    if (gameWebSocket && gameWebSocket.readyState === WebSocket.OPEN) {
+        const messageType = MESSAGE_TYPE.STOP_GAME;
+        const payload = new Uint8Array(0); // Empty payload for STOP_GAME
+        const payloadLength = payload.length;
+        
+        // Create ArrayBuffer: 2 bytes (message type) + 2 bytes (payload length) + payload
+        const buffer = new ArrayBuffer(4 + payloadLength);
+        const view = new DataView(buffer);
+        
+        // Write header
+        view.setUint16(0, messageType, true); // little-endian
+        view.setUint16(2, payloadLength, true); // little-endian
+        
+        gameWebSocket.send(buffer);
+        console.log('Client sent STOP_GAME');
+    }
+}
+
+// Close WebSocket when leaving game screen
+function closeWebSocket() {
+    if (clientPingInterval) {
+        clearInterval(clientPingInterval);
+        clientPingInterval = null;
+    }
+    if (gameWebSocket) {
+        gameWebSocket.close();
+        gameWebSocket = null;
     }
 }
 
